@@ -21,7 +21,14 @@ async function getYears(corp_code: string, fsDiv: "CFS"|"OFS") {
   return [...new Set((data||[]).map(d=>Number(d.bsns_year)))]; // 오름차순
 }
 
-export type FinRow = { year:number; sales?:number; oi?:number; ni?:number; equity?:number; roe?:number };
+export type FinRow = {
+  year: number;
+  sales?: number | null;
+  oi?: number | null;
+  ni?: number | null;
+  equity?: number | null;
+  roe?: number | null;
+};
 
 export async function getSeriesByStock(
   stock_code: string,
@@ -60,13 +67,26 @@ export async function getSeriesByStock(
     rows.push({ year:y, sales, oi, ni, equity });
   }
 
+const toNum = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+
   // 4) ROE = 당기순이익 / 평균자본총계
-  for (let i=0;i<rows.length;i++){
-    const eNow = rows[i].equity;
-    const ePrev= i>0 ? rows[i-1].equity : undefined;
-    const avgE = (eNow && ePrev) ? (eNow+ePrev)/2 : eNow || undefined;
-    rows[i].roe = (rows[i].ni && avgE) ? rows[i].ni/avgE : undefined;
-  }
+rows.forEach((curr, idx, arr) => {
+  const eNow  = toNum(curr?.equity);
+  const ePrev = idx > 0 ? toNum(arr[idx - 1]?.equity) : undefined;
+
+  // 전년도 자본이 있으면 평균, 없으면 당기 자본 사용
+  const avgE =
+    eNow !== undefined && ePrev !== undefined ? (eNow + ePrev) / 2
+    : eNow !== undefined ? eNow
+    : undefined;
+
+  const ni = toNum(curr?.ni);
+
+  curr.roe =
+    ni !== undefined && avgE !== undefined && avgE !== 0
+      ? ni / avgE
+      : undefined;
+});
 
   return { corp_code: c.corp_code, name_kr: c.name_kr, rows };
 }
